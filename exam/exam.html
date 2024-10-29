@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>이미지 분석기</title>
+    <script src="https://code.jquery.com/jquery-3.7.1.js"></script>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            background-color: #f0f0f0;
+            color: #333;
+            margin: 0;
+            padding: 20px;
+        }
+        h1 {
+            text-align: center;
+            color: #4CAF50;
+            margin-bottom: 20px;
+            font-size: 2.5em;
+            text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.2);
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            transition: transform 0.3s;
+        }
+        .container:hover {
+            transform: scale(1.02);
+        }
+        input[type="file"] {
+            margin: 20px 0;
+            display: block;
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            font-size: 16px;
+            transition: border 0.3s;
+        }
+        input[type="file"]:hover {
+            border-color: #4CAF50;
+        }
+        input[type="button"] {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            padding: 12px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 18px;
+            width: 100%;
+            transition: background-color 0.3s;
+        }
+        input[type="button"]:hover {
+            background-color: #45a049;
+        }
+        #gimage {
+            max-width: 100%;
+            height: auto;
+            display: none;
+            border: 5px solid #555;
+            border-radius: 5px;
+            margin-top: 20px;
+        }
+        #result {
+            margin-top: 20px;
+            width: 100%;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            padding: 10px;
+            background-color: #f9f9f9;
+            color: #333;
+            box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.1);
+            overflow-y: auto; 
+            max-height: 400px;
+        }
+        .face-result {
+            border: 1px solid #4CAF50;
+            border-radius: 5px;
+            padding: 10px;
+            margin: 10px 0;
+            background-color: #f1fff1;
+        }
+        .face-title {
+            font-weight: bold;
+            font-size: 1.2em;
+            margin-bottom: 5px;
+            color: #4CAF50;
+        }
+        .likelihood {
+            color: #ff5722; 
+            font-weight: bold;
+        }
+        #clock {
+            text-align: center;
+            font-size: 1.5em;
+            color: #333;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    
+    <div id="clock"></div>
+    <div class="container">
+        <h1>김병수 인공지능 놀이터 구글 비젼 API</h1>
+
+        <input type="file" accept="image/jpeg" onchange="uploadFiles(this.files)">
+        <input type="button" onclick="analyze()" value="이미지 분석">
+        
+        <img id="gimage" alt="Uploaded Image">
+        
+        <div id="result"></div>
+    </div>
+
+    <script>
+        let imagestring; 
+        const VISION_API_KEY = "";
+        
+       
+        function updateClock() {
+            const now = new Date();
+            const options = {
+                year: 'numeric', month: '2-digit', day: '2-digit',
+                hour: '2-digit', minute: '2-digit', second: '2-digit',
+                hour12: false
+            };
+            document.getElementById("clock").textContent = now.toLocaleString('ko-KR', options);
+        }
+
+   
+        function convertLikelihoodToProbability(likelihood) {
+            switch (likelihood) {
+                case "VERY_UNLIKELY": return 0.01;   // 1%
+                case "UNLIKELY": return 0.25;        // 25%
+                case "POSSIBLE": return 0.5;         // 50%
+                case "LIKELY": return 0.75;          // 75%
+                case "VERY_LIKELY": return 0.9;      // 90%
+                default: return 0;                    // 기본값
+            }
+        }
+
+        function processFile(event) {
+            const content = event.target.result; 
+            imagestring = content.replace('data:image/jpeg;base64,', '');
+            const imgElement = document.getElementById("gimage");
+            imgElement.src = content;
+            imgElement.style.display = "block"; 
+        }
+
+        function uploadFiles(files) {
+            const file = files[0];
+            const reader = new FileReader();
+            reader.onloadend = processFile;
+            reader.readAsDataURL(file);
+        }
+
+        function analyze() {
+            if (!imagestring) {
+                alert("이미지를 업로드해주세요.");
+                return;
+            }
+
+            const data = {
+                requests: [{
+                    image: {
+                        content: imagestring
+                    },
+                    features: [{
+                        type: "FACE_DETECTION",
+                        maxResults: 100
+                    }]
+                }]
+            };
+
+            $.ajax({
+                type: "POST",
+                url: 'https://vision.googleapis.com/v1/images:annotate?key=' + VISION_API_KEY,
+                headers: {
+                    "Accept": "application/json",
+                    "Content-Type": "application/json"
+                },
+                data: JSON.stringify(data),
+                contentType: "application/json; charset=utf-8"
+            }).done(function(response) {
+                console.log(response);
+                displayResults(response); 
+            }).fail(function(error) {
+                console.error("요청 실패:", error);
+                alert("요청 실패: " + error.responseText);
+            });
+        }
+
+        function displayResults(response) {
+            const resultArea = document.getElementById("result");
+            resultArea.innerHTML = ''; 
+
+            if (response.responses[0].faceAnnotations && response.responses[0].faceAnnotations.length > 0) {
+                const faces = response.responses[0].faceAnnotations;
+                resultArea.innerHTML += `<p>검출된 얼굴 수: ${faces.length}</p>`;
+                
+                faces.forEach((face, index) => {
+                    let faceResult = `<div class="face-result">`;
+                    faceResult += `<div class="face-title">얼굴 ${index + 1}:</div>`;
+                    faceResult += `화남 확률: <span class="likelihood">${(convertLikelihoodToProbability(face.angerLikelihood) * 100).toFixed(2)}%</span><br>`;
+                    faceResult += `기쁨 확률: <span class="likelihood">${(convertLikelihoodToProbability(face.joyLikelihood) * 100).toFixed(2)}%</span><br>`;
+                    faceResult += `슬픔 확률: <span class="likelihood">${(convertLikelihoodToProbability(face.sorrowLikelihood) * 100).toFixed(2)}%</span><br>`;
+                    faceResult += `놀람 확률: <span class="likelihood">${(convertLikelihoodToProbability(face.surpriseLikelihood) * 100).toFixed(2)}%</span><br>`;
+                    faceResult += `신뢰도: <span class="likelihood">${(face.detectionConfidence * 100).toFixed(2)}%</span><br>`;
+                    faceResult += `수평 회전 각도: ${face.panAngle.toFixed(2)}°<br>`;
+                    faceResult += `기울기 각도: ${face.rollAngle.toFixed(2)}°<br>`;
+                    faceResult += `경사 각도: ${face.tiltAngle.toFixed(2)}°<br>`;
+                    faceResult += `</div>`;
+                    
+                    resultArea.innerHTML += faceResult; 
+                });
+            } else {
+                resultArea.innerHTML = '<p>얼굴을 찾을 수 없습니다.</p>';
+            }
+        }
+
+        // 페이지 로드 시 시계 업데이트 시작
+        setInterval(updateClock, 1000);
+        updateClock(); // 초기 시각 설정
+
+    </script>
+
+</body>
+</html>
